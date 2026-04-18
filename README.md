@@ -1,132 +1,120 @@
 # Contoso Research System
 
-Professional-grade enterprise research orchestration system designed for production-style development with clear service boundaries, repeatable setup, and deterministic execution steps.
+![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-## 1. Executive Overview
+Multi-agent research intelligence platform with 5 specialist analysts (financial, market, news, risk, ESG), fan-out/gather orchestration, compliance gating, and synthesis — powered by Azure OpenAI, Cosmos DB, and Service Bus.
 
-This repository provides:
-- A FastAPI service entrypoint for API-first integration
-- Structured modules for orchestration, domain logic, and integrations
-- Test scaffolding for incremental quality assurance
-- Environment-driven configuration for local, staging, and production workflows
+## Architecture
 
-## 2. Architecture
-
-### 2.1 Logical Architecture
-
-```txt
-Client / Integrator
-      |
-      v
-FastAPI API Layer (Uvicorn)
-      |
-      +--> Application Layer (routing, orchestration)
-      +--> Domain Layer (business rules)
-      +--> Integration Layer (Azure/OpenAI/search/messaging)
-      +--> Data/State Layer (configured adapters)
+```
+ResearchRequest
+        │
+        ▼
+┌──────────────────────────────────────────┐
+│  ResearchPipeline (orchestrator)         │
+│                                          │
+│  Fan-Out (5 specialists in parallel):    │
+│       ├──► FinancialAnalyst             │
+│       ├──► MarketResearcher             │
+│       ├──► NewsAnalyst                  │
+│       ├──► RiskAssessor                 │
+│       └──► ESGAnalyst                   │
+│       │                                  │
+│  Gather ──► Timeout handling (120s)     │
+│       │                                  │
+│  Synthesiser ──► Unified report         │
+│       │                                  │
+│  ComplianceGate ──► Rules + prompts     │
+│       │                                  │
+│  ReportStore ──► Cosmos DB              │
+└──────────────────────────────────────────┘
+        │
+        ▼
+FinalReport (JSON + formatted template)
 ```
 
-### 2.2 Runtime Components
-- API Server: FastAPI + Uvicorn
-- Configuration: environment variables and .env file
-- External Integrations: enabled per environment
-- Validation: pytest + e2e demo script
+## Key Features
 
-## 3. Repository Structure
+- **5 Specialist Agents** — Financial, market, news, risk, and ESG analysts run concurrently
+- **Fan-Out/Gather Pattern** — `asyncio.gather` with 120-second timeout per specialist
+- **Compliance Gate** — Rule-based + LLM validation with dedicated rules engine and prompts
+- **Synthesiser** — Merges specialist outputs into a unified report with structured prompt engineering
+- **Report Template** — `report_template.py` formats final output for executive consumption
+- **Report Store** — Persists completed reports to Cosmos DB via `store_report()`
+- **Service Bus Integration** — Async event-driven processing via Azure Service Bus
 
-```txt
+## Step-by-Step Flow
+
+### Step 1: Research Request
+User submits a `ResearchRequest` with topic, scope, and parameters via `POST /research`.
+
+### Step 2: Fan-Out
+`ResearchPipeline` launches all 5 specialists concurrently with `asyncio.gather`, each producing a `SpecialistOutput`.
+
+### Step 3: Gather
+Results collected with timeout handling. Failed specialists logged; pipeline continues with available outputs.
+
+### Step 4: Synthesis
+`synthesise()` combines all specialist outputs into a `SynthesisResult` using structured prompts.
+
+### Step 5: Compliance Review
+`review_compliance()` validates the synthesis against compliance rules and LLM-based checks.
+
+### Step 6: Store & Respond
+`store_report()` persists the `FinalReport` to Cosmos DB. Client receives the complete report.
+
+## Repository Structure
+
+```
 contoso-research-system/
-  src/ or orchestrator/
-  tests/
-  infra/
-  requirements.txt
-  demo_e2e.py
+├── orchestrator/
+│   ├── main.py              # FastAPI entry point
+│   ├── pipeline.py           # ResearchPipeline — fan-out/gather
+│   └── report_store.py       # Cosmos DB persistence
+├── specialists/
+│   ├── base_specialist.py    # BaseSpecialist ABC
+│   ├── financial_analyst.py
+│   ├── market_researcher.py
+│   ├── news_analyst.py
+│   ├── risk_assessor.py
+│   └── esg_analyst.py
+├── synthesiser/
+│   ├── agent.py              # synthesise()
+│   ├── prompts.py
+│   └── report_template.py
+├── compliance_gate/
+│   ├── agent.py              # review_compliance()
+│   ├── rules.py
+│   └── prompts.py
+├── shared/
+│   ├── config.py, models.py, service_bus.py, logging_config.py
+├── tests/
+│   ├── test_specialists.py, test_compliance.py, test_pipeline_e2e.py
+├── demo_e2e.py
+├── requirements.txt
+└── .env.example
 ```
 
-## 4. Prerequisites
-
-- Python 3.10+
-- pip 23+
-- Git
-- Optional cloud credentials for enabled connectors
-
-## 5. Local Setup
-
-1. Clone repository
+## Quick Start
 
 ```bash
 git clone https://github.com/maneeshkumar52/contoso-research-system.git
 cd contoso-research-system
-```
-
-2. Create virtual environment
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-3. Install dependencies
-
-```bash
-pip install --upgrade pip
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-4. Configure environment
-
-```bash
-cp .env.example .env 2>/dev/null || true
-```
-
-## 6. Run the Service
-
-```bash
+cp .env.example .env
 uvicorn orchestrator.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Service endpoints:
-- API docs: http://127.0.0.1:8000/docs
-- OpenAPI JSON: http://127.0.0.1:8000/openapi.json
-
-## 7. Validation and Test Flow
-
-1. Syntax validation
-
-```bash
-python3 -m compileall -q .
-```
-
-2. Unit/integration tests
+## Testing
 
 ```bash
 pytest -q
-```
-
-3. End-to-end demo
-
-```bash
 python demo_e2e.py
 ```
 
-## 8. Troubleshooting
+## License
 
-- Import or module errors:
-  - Ensure .venv is active
-  - Reinstall dependencies
-- Port already in use:
-  - Change --port value
-- Cloud connector failures:
-  - Validate credentials and service endpoints in .env
-
-## 9. Production Readiness Checklist
-
-- [ ] Environment variables externalized
-- [ ] Secrets not committed
-- [ ] Logging and tracing enabled
-- [ ] Test suite green in CI
-- [ ] Health checks configured in deployment
-
-## 10. License
-
-See LICENSE in this repository.
+MIT
